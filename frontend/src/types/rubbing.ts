@@ -32,11 +32,13 @@ export interface Rubbing {
   dateGuess: string;
   /** 状态 */
   state: RubbingState;
+  /** 共同基准版本号：协作对账时的三方合并基准，本地每改一次 +1，初始为 1 */
+  baseVersion: number;
   createdAt: number;
   updatedAt: number;
 }
 
-export type RubbingDraft = Omit<Rubbing, 'id' | 'createdAt' | 'updatedAt'>;
+export type RubbingDraft = Omit<Rubbing, 'id' | 'createdAt' | 'updatedAt' | 'baseVersion'>;
 
 export const RUBBING_METHOD_LABEL: Record<RubbingMethod, string> = {
   rub: '擦拓',

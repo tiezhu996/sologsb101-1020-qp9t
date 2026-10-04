@@ -23,11 +23,13 @@ export interface Loss {
   severity: LossSeverity;
   /** 释文备注 */
   note: string;
+  /** 共同基准版本号：协作对账时的三方合并基准，本地每改一次 +1，初始为 1 */
+  baseVersion: number;
   createdAt: number;
   updatedAt: number;
 }
 
-export type LossDraft = Omit<Loss, 'id' | 'createdAt' | 'updatedAt'>;
+export type LossDraft = Omit<Loss, 'id' | 'createdAt' | 'updatedAt' | 'baseVersion'>;
 
 export const LOSS_TYPE_LABEL: Record<LossType, string> = {
   missing: '缺字',

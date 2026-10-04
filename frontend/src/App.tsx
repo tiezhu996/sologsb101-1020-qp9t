@@ -18,6 +18,7 @@ import { loadAll, useAppDispatch, useAppSelector } from './stores/store';
 import { selectSteles } from './stores/steleSlice';
 import { selectRubbings } from './stores/rubbingSlice';
 import { selectLosses } from './stores/lossSlice';
+import { selectSyncConflicts } from './stores/syncSlice';
 import { initDatabase } from './utils/db';
 import { STELE_FORM_LABEL } from './types/stele';
 
@@ -32,6 +33,7 @@ export default function App() {
   const steles = useAppSelector(selectSteles);
   const rubbings = useAppSelector(selectRubbings);
   const losses = useAppSelector(selectLosses);
+  const conflictCount = useAppSelector(selectSyncConflicts).length;
   const currentSteleId = useAppSelector((state) => state.stele.currentSteleId);
 
   useEffect(() => {
@@ -87,6 +89,13 @@ export default function App() {
             { key: ROUTES.export, icon: <ExportOutlined />, label: '编目卡导出' },
           ]}
         />
+        {conflictCount > 0 ? (
+          <div style={{ padding: '8px 16px 0' }}>
+            <Tag color="volcano" style={{ margin: 0 }}>
+              {conflictCount} 条协作冲突待选定
+            </Tag>
+          </div>
+        ) : null}
         <div style={{ padding: '12px 16px', color: 'rgba(240,230,207,0.6)', fontSize: 12 }}>
           <Space direction="vertical" size={2}>
             <span>

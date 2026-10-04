@@ -71,7 +71,7 @@ npm run preview    # 本地预览构建产物（http://localhost:22820）
 | `/rubbings` | 拓本登记 | 录入拓法、纸墨、尺寸与收藏号；同碑自动生成版本序号，钤印增删改与批量调整印别，批量改状态 | Rubbing、Seal、Stele |
 | `/losses` | 损泐字位标注台 | 行号 × 字位网格逐格标注，批量改严重程度；选定基准拓本即时高亮差异字位 | Loss、Rubbing |
 | `/compare` | 同碑多版本比对与断代 | 选定 A/B 两拓本，按字位坐标比对损泐集合并排展示差异，推断早本 / 晚本 / 同版 / 待考并落库 | Compare、Loss、Rubbing |
-| `/export` | 编目卡生成与导出 | 按碑刻生成编目卡文本、合订导出、钤印明细、JSON 导入导出、损泐台账 CSV、清空重播种 | 全部模型 |
+| `/export` | 编目卡生成与导出 | 按碑刻生成编目卡文本、合订导出、钤印明细、JSON 导入导出、损泐台账 CSV、清空重播种；导出 / 导入**协作包**并处理冲突区 | 全部模型 |
 
 `/` 与未匹配路径重定向到 `/steles`。筛选条件写入 URL query（`?kw=&method=&state=` 等），可直接分享带条件的链接。
 
@@ -87,7 +87,11 @@ npm run preview    # 本地预览构建产物（http://localhost:22820）
 | Seal 钤印 | `src/types/seal.ts` | `id` `rubbingId` `sealText` `position` `transcription` `sealType`（收藏印/鉴赏印/作者印） | 按位置排序展示，支持批量改印别 |
 | Compare 版本比对 | `src/types/compare.ts` | `id` `steleId` `rubbingIdA` `rubbingIdB` `diffCount` `conclusion`（早本/晚本/同版/待考） `operator` `date` | 选定两拓本即生成差异清单并回写断代结论 |
 
-数据结构版本号 `DB_SCHEMA_VERSION` 定义在 `src/utils/db.ts`，当前为 `v2`：`losses` 表增加 `charNo` 与 `[rubbingId+lineNo+charNo]` 复合索引，并在 Dexie `.upgrade()` 中按行号顺序为历史字位记录重建 `charNo`。
+五张业务表的每条记录都带共同基准版本号 `baseVersion`（本地每改一次 +1，初始为 1），用于协作包三方对账。
+
+数据结构版本号 `DB_SCHEMA_VERSION` 定义在 `src/utils/db.ts`，当前为 `v3`：
+- v1→v2：`losses` 表增加 `charNo` 与 `[rubbingId+lineNo+charNo]` 复合索引，并在 Dexie `.upgrade()` 中按行号顺序为历史字位记录重建 `charNo`；
+- v2→v3：五张业务表统一补 `baseVersion`（共同基准版本），新增 `syncConflicts`（未决冲突区）、`appliedPackages`（已合入协作包登记）、`syncBaseline`（共同基准快照，单行文档）三张对账表。升级时为全部历史业务记录（含已有比对记录）补初始基准版本 `v1`、就地保留仍可查看，并把当时整库固化为初始共同基准。
 
 ---
 
@@ -97,9 +101,10 @@ npm run preview    # 本地预览构建产物（http://localhost:22820）
 sologsb101-1020/
 ├── frontend/                     # 前端源码
 │   ├── src/
-│   │   ├── types/                # stele.ts rubbing.ts loss.ts seal.ts compare.ts
-│   │   ├── stores/               # steleSlice.ts rubbingSlice.ts lossSlice.ts store.ts
+│   │   ├── types/                # stele.ts rubbing.ts loss.ts seal.ts compare.ts sync.ts
+│   │   ├── stores/               # steleSlice.ts rubbingSlice.ts lossSlice.ts syncSlice.ts store.ts
 │   │   ├── components/common/    # LossTag.tsx FilterBar.tsx StatBadge.tsx EmptyPanel.tsx
+│   │   ├── components/sync/      # SyncPanel.tsx SyncConflictPanel.tsx
 │   │   ├── hooks/                # useLossDiff.ts useIdbTable.ts
 │   │   ├── pages/                # SteleList.tsx RubbingList.tsx LossBoard.tsx CompareView.tsx ExportView.tsx
 │   │   ├── router/               # index.tsx
@@ -123,9 +128,16 @@ sologsb101-1020/
 
 ## 七、数据存储说明
 
-- **IndexedDB（Dexie，数据库名 `gbrubbing`）**：5 张业务表 `steles` / `rubbings` / `losses` / `seals` / `compares`，由 `src/utils/db.ts` 统一定义 schema、版本号与升级迁移；`initDatabase()` 首次打开时自动播种**三层互相引用**的演示数据（Stele → Rubbing → Loss / Seal，另有 Stele → Compare，固定 id 如 `stele_01`、`rub_0101`、`loss_010101`），播种幂等，保证字位网格与比对台打开即有内容。
+- **IndexedDB（Dexie，数据库名 `gbrubbing`）**：5 张业务表 `steles` / `rubbings` / `losses` / `seals` / `compares`，加 3 张协作对账表 `syncConflicts`（未决冲突区）/ `appliedPackages`（已合入包登记）/ `syncBaseline`（共同基准快照）。由 `src/utils/db.ts` 统一定义 schema、版本号与升级迁移；`initDatabase()` 首次打开时自动播种**三层互相引用**的演示数据（Stele → Rubbing → Loss / Seal，另有 Stele → Compare，固定 id 如 `stele_01`、`rub_0101`、`loss_010101`），播种幂等，保证字位网格与比对台打开即有内容。
 - **localStorage**：仅存元数据 —— `gbrubbing:db-version`（本地结构版本）、`gbrubbing:last-backup-at`（最近导出时间）、`gbrubbing:ui-prefs`（当前碑刻 / 拓本）。
-- **备份**：`/export` 页可导出 JSON（5 张表全量数据 + 结构版本号），导入时校验 `app` 字段与各集合数组完整性，覆盖导入前二次确认；另有编目卡 TXT 与损泐台账 CSV。
+- **整库备份**：`/export` 页可导出 JSON（5 张表全量数据 + 结构版本号 + 共同基准 + 冲突区 / 已合入包登记），导入时校验 `app` 字段与各集合数组完整性，覆盖导入前二次确认；历史备份缺失的 `baseVersion` / 基准快照会在导入时补齐；另有编目卡 TXT 与损泐台账 CSV（均写明每条记录的来源版本）。
+- **协作包（离线补录对账，`src/utils/sync.ts`）**：两台电脑可各自离线修改后交换协作包，系统按「共同基准 / 本机工作库 / 协作包」**三方对账**：
+  - 导出时为每张业务记录带上共同基准版本 `baseVersion` 与所锚定碑刻，并整体附上导出方的共同基准快照；
+  - 导入时**只应用单边变化**（单边新增 / 修改 / 删除；碑刻、拓本删除沿损泐 / 钤印 / 比对业务关系级联）；同一记录两边都改过（含一改一删、两边各自新建）则进入**冲突区**，并排显示「本机工作库 / 协作包」两侧字段值与来源版本，人工选定后才写入；
+  - **重复导入同一个包**（按 `packageId`）不重复新增、不重复报冲突；
+  - 包内**引用不全**（子记录的父拓本 / 碑刻不在包内）整包拒绝、不写入；
+  - 应用全程在单个 IndexedDB 事务内，任何写入失败自动**恢复导入前状态**；**未决冲突**不写业务表、跨次导入持续保留；
+  - 父记录被单边删除但其子记录仍在冲突中时，删除会升级为「一改一删」冲突，避免误删前人尚待裁决的内容。
 - **隐私与无状态**：数据不上传任何服务器，容器不挂载命名卷；清理浏览器站点数据或更换浏览器会丢失档案，请定期导出备份。
 
 ---

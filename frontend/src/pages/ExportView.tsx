@@ -28,12 +28,15 @@ import {
 import EmptyPanel from '@/components/common/EmptyPanel';
 import LossTag from '@/components/common/LossTag';
 import StatBadge from '@/components/common/StatBadge';
+import SyncPanel from '@/components/sync/SyncPanel';
+import SyncConflictPanel from '@/components/sync/SyncConflictPanel';
 import { useIdbTable } from '@/hooks/useIdbTable';
 import { useAppDispatch, useAppSelector } from '@/stores/store';
 import { loadAll } from '@/stores/store';
 import { selectSteles, setCurrentStele } from '@/stores/steleSlice';
 import { selectRubbings } from '@/stores/rubbingSlice';
 import { selectCompares, selectLosses } from '@/stores/lossSlice';
+import { selectAppliedPackages } from '@/stores/syncSlice';
 import { SEAL_TYPE_COLOR, SEAL_TYPE_LABEL, sealPositionWeight, type Seal, type SealType } from '@/types/seal';
 import { RUBBING_METHOD_LABEL, RUBBING_STATE_LABEL } from '@/types/rubbing';
 import { COMPARE_CONCLUSION_COLOR, COMPARE_CONCLUSION_LABEL } from '@/types/compare';
@@ -67,6 +70,7 @@ export default function ExportView() {
   const losses = useAppSelector(selectLosses);
   const compares = useAppSelector(selectCompares);
   const sealTable = useIdbTable<Seal>((database) => database.seals, { sortByUpdatedAt: false });
+  const appliedPackages = useAppSelector(selectAppliedPackages);
 
   const [steleId, setSteleId] = useState<string>('');
   const [lastBackupAt, setLastBackupAt] = useState<string | null>(readLastBackupAt());
@@ -378,6 +382,22 @@ export default function ExportView() {
             </Space>
           </Card>
 
+          <div style={{ marginTop: 16 }}>
+            <SyncPanel />
+            {appliedPackages.length > 0 ? (
+              <Card size="small" style={{ marginTop: 12 }} title="已合入协作包">
+                <Space size={6} wrap>
+                  {appliedPackages.slice(0, 6).map((item) => (
+                    <Tag key={item.id}>
+                      {item.producer} · {new Date(item.appliedAt).toLocaleDateString('zh-CN')}
+                    </Tag>
+                  ))}
+                  {appliedPackages.length > 6 ? <Tag>等 {appliedPackages.length} 个</Tag> : null}
+                </Space>
+              </Card>
+            ) : null}
+          </div>
+
           <Card title="拓本状态一览" style={{ marginTop: 16 }} size="small">
             <Space direction="vertical" size={4} style={{ width: '100%' }}>
               {rubbings.filter((rubbing) => rubbing.steleId === activeSteleId).length === 0 ? (
@@ -419,6 +439,8 @@ export default function ExportView() {
           </Card>
         </Col>
       </Row>
+
+      <SyncConflictPanel />
     </div>
   );
 }

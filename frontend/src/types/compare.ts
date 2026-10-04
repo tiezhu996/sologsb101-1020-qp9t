@@ -22,11 +22,13 @@ export interface Compare {
   operator: string;
   /** 比对日期 yyyy-MM-dd */
   date: string;
+  /** 共同基准版本号：协作对账时的三方合并基准，本地每改一次 +1，初始为 1 */
+  baseVersion: number;
   createdAt: number;
   updatedAt: number;
 }
 
-export type CompareDraft = Omit<Compare, 'id' | 'createdAt' | 'updatedAt'>;
+export type CompareDraft = Omit<Compare, 'id' | 'createdAt' | 'updatedAt' | 'baseVersion'>;
 
 export const COMPARE_CONCLUSION_LABEL: Record<CompareConclusion, string> = {
   early: '早本',

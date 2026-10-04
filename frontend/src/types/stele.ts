@@ -21,11 +21,13 @@ export interface Stele {
   sizeCm: string;
   /** 书者 */
   calligrapher: string;
+  /** 共同基准版本号：协作对账时的三方合并基准，本地每改一次 +1，初始为 1 */
+  baseVersion: number;
   createdAt: number;
   updatedAt: number;
 }
 
-export type SteleDraft = Omit<Stele, 'id' | 'createdAt' | 'updatedAt'>;
+export type SteleDraft = Omit<Stele, 'id' | 'createdAt' | 'updatedAt' | 'baseVersion'>;
 
 export const STELE_FORM_LABEL: Record<SteleForm, string> = {
   stele: '碑',

@@ -14,6 +14,7 @@ import { SEAL_TYPE_LABEL, sealPositionWeight } from '@/types/seal';
 import { COMPARE_CONCLUSION_LABEL } from '@/types/compare';
 import { diffLosses, encodeCoord, sortLosses } from './collate';
 import type { RubbingSnapshot } from './db';
+import type { SyncPackage } from './sync';
 
 export function download(filename: string, content: string, mime: string): void {
   const blob = new Blob([content], { type: mime });
@@ -39,6 +40,14 @@ export function exportSnapshotJson(snapshot: RubbingSnapshot): string {
   return filename;
 }
 
+/** 协作包文件（携带共同基准版本与基准快照，供另一台电脑三方对账） */
+export function exportSyncPackageFile(pkg: SyncPackage): string {
+  const producer = (pkg.producer || '本机工作库').replace(/[\\/:*?"<>|\s]+/g, '_');
+  const filename = `gbrubbing-collab-${producer}-${stampSuffix()}.json`;
+  download(filename, JSON.stringify(pkg, null, 2), 'application/json;charset=utf-8');
+  return filename;
+}
+
 function csvCell(value: string | number | null): string {
   const text = value === null ? '' : String(value);
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
@@ -53,7 +62,7 @@ export function buildCatalogCard(
   compares: Compare[],
 ): string {
   const lines: string[] = [];
-  lines.push(`【碑帖编目卡】${stele.title}`);
+  lines.push(`【碑帖编目卡】${stele.title}　［记录来源版本 v${stele.baseVersion}］`);
   lines.push(`年代：${stele.era || '待考'}　形制：${STELE_FORM_LABEL[stele.form]}　尺寸：${stele.sizeCm || '未测'}`);
   lines.push(`所在地：${stele.location || '未记'}　书者：${stele.calligrapher || '佚名'}`);
   lines.push(`拓本数：${rubbings.length}　损泐字位：${losses.length} 条　钤印：${seals.length} 方`);
@@ -67,19 +76,19 @@ export function buildCatalogCard(
         .filter((seal) => seal.rubbingId === rubbing.id)
         .sort((a, b) => sealPositionWeight(a.position) - sealPositionWeight(b.position));
       lines.push(
-        `第 ${rubbing.versionNo} 版　${RUBBING_METHOD_LABEL[rubbing.method]}　${INK_TONE_LABEL[rubbing.inkTone]}　${rubbing.paperType}　${rubbing.sizeCm || '尺寸未记'}　收藏号 ${rubbing.collectionNo || '未编'}　${rubbing.dateGuess || '年代待考'}　${RUBBING_STATE_LABEL[rubbing.state]}`,
+        `第 ${rubbing.versionNo} 版　${RUBBING_METHOD_LABEL[rubbing.method]}　${INK_TONE_LABEL[rubbing.inkTone]}　${rubbing.paperType}　${rubbing.sizeCm || '尺寸未记'}　收藏号 ${rubbing.collectionNo || '未编'}　${rubbing.dateGuess || '年代待考'}　${RUBBING_STATE_LABEL[rubbing.state]}　［记录来源版本 v${rubbing.baseVersion}］`,
       );
       lines.push(`　损泐字位（${rubbingLosses.length} 条）：`);
       if (rubbingLosses.length === 0) lines.push('　　无');
       rubbingLosses.forEach((loss) => {
         lines.push(
-          `　　${encodeCoord(loss.lineNo, loss.charNo)}　${LOSS_TYPE_LABEL[loss.type]}·${LOSS_SEVERITY_LABEL[loss.severity]}　${loss.note || ''}`,
+          `　　${encodeCoord(loss.lineNo, loss.charNo)}　${LOSS_TYPE_LABEL[loss.type]}·${LOSS_SEVERITY_LABEL[loss.severity]}　${loss.note || ''}　［来源 v${loss.baseVersion}］`,
         );
       });
       lines.push(`　钤印（${rubbingSeals.length} 方）：`);
       if (rubbingSeals.length === 0) lines.push('　　无');
       rubbingSeals.forEach((seal) => {
-        lines.push(`　　${seal.position}　${seal.sealText}　${SEAL_TYPE_LABEL[seal.sealType]}　${seal.transcription || ''}`);
+        lines.push(`　　${seal.position}　${seal.sealText}　${SEAL_TYPE_LABEL[seal.sealType]}　${seal.transcription || ''}　［来源 v${seal.baseVersion}］`);
       });
       lines.push('');
     });
@@ -93,7 +102,7 @@ export function buildCatalogCard(
     lines.push(
       `　${compare.date}　A：第 ${a?.versionNo ?? '?'} 版　B：第 ${b?.versionNo ?? '?'} 版　差异 ${compare.diffCount} 字　结论 ${
         COMPARE_CONCLUSION_LABEL[compare.conclusion]
-      }　操作人 ${compare.operator || '未填'}`,
+      }　操作人 ${compare.operator || '未填'}　［来源 v${compare.baseVersion}］`,
     );
   });
   return lines.join('\n');
@@ -138,7 +147,7 @@ export function buildAllCatalogCards(context: ExportContext): string {
 
 /** 损泐台账 CSV（碑刻 / 拓本 / 字位 / 类型 / 程度） */
 export function exportLossLedgerCsv(context: ExportContext): string {
-  const header = ['碑名', '拓本版本', '拓法', '行号', '字位', '坐标', '损泐类型', '严重程度', '释文备注'];
+  const header = ['碑名', '拓本版本', '拓法', '行号', '字位', '坐标', '损泐类型', '严重程度', '释文备注', '记录来源版本'];
   const lines: string[] = [header.map(csvCell).join(',')];
   context.steles.forEach((stele) => {
     const rubbings = context.rubbings
@@ -157,6 +166,7 @@ export function exportLossLedgerCsv(context: ExportContext): string {
             LOSS_TYPE_LABEL[loss.type],
             LOSS_SEVERITY_LABEL[loss.severity],
             loss.note,
+            `v${loss.baseVersion}`,
           ]
             .map(csvCell)
             .join(','),

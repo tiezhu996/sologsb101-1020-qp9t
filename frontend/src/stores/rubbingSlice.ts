@@ -3,7 +3,7 @@
  * 维护拓本与钤印集合及筛选条件；同一碑刻下自动生成版本序号。
  */
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit';
-import { createId, db, removeRubbingCascade, renumberRubbings } from '@/utils/db';
+import { bumpBaseVersion, createId, db, INITIAL_BASE_VERSION, removeRubbingCascade, renumberRubbings } from '@/utils/db';
 import {
   nextRubbingState,
   type Rubbing,
@@ -50,7 +50,7 @@ export const loadRubbings = createAsyncThunk('rubbing/load', async () => {
 
 export const createRubbing = createAsyncThunk('rubbing/create', async (draft: RubbingDraft, { dispatch }) => {
   const now = Date.now();
-  const row: Rubbing = { ...draft, id: createId('rub'), createdAt: now, updatedAt: now };
+  const row: Rubbing = { ...draft, id: createId('rub'), baseVersion: INITIAL_BASE_VERSION, createdAt: now, updatedAt: now };
   await db.rubbings.put(row);
   await renumberRubbings(row.steleId);
   await dispatch(loadRubbings());
@@ -59,8 +59,14 @@ export const createRubbing = createAsyncThunk('rubbing/create', async (draft: Ru
 
 export const updateRubbing = createAsyncThunk(
   'rubbing/update',
-  async (payload: { id: string; patch: Partial<Rubbing> }, { dispatch }) => {
-    await db.rubbings.update(payload.id, { ...payload.patch, updatedAt: Date.now() } as never);
+  async (payload: { id: string; patch: Partial<Rubbing> }, { dispatch, getState }) => {
+    const state = getState() as RootState;
+    const previous = state.rubbing.items.find((item) => item.id === payload.id);
+    await db.rubbings.update(payload.id, {
+      ...payload.patch,
+      baseVersion: bumpBaseVersion(previous?.baseVersion),
+      updatedAt: Date.now(),
+    } as never);
     await dispatch(loadRubbings());
   },
 );
@@ -73,7 +79,7 @@ export const advanceRubbingState = createAsyncThunk(
     if (!row) return;
     const next = nextRubbingState(row.state);
     if (next === row.state) return;
-    await db.rubbings.update(id, { state: next, updatedAt: Date.now() } as never);
+    await db.rubbings.update(id, { state: next, baseVersion: bumpBaseVersion(row.baseVersion), updatedAt: Date.now() } as never);
     await dispatch(loadRubbings());
   },
 );
@@ -85,7 +91,7 @@ export const batchUpdateRubbings = createAsyncThunk(
     const now = Date.now();
     const rows = state.rubbing.items
       .filter((item) => payload.ids.includes(item.id))
-      .map((item) => ({ ...item, ...payload.patch, updatedAt: now }));
+      .map((item) => ({ ...item, ...payload.patch, baseVersion: bumpBaseVersion(item.baseVersion), updatedAt: now }));
     if (rows.length > 0) await db.rubbings.bulkPut(rows);
     await dispatch(loadRubbings());
   },
@@ -103,14 +109,20 @@ export const removeRubbing = createAsyncThunk('rubbing/remove', async (id: strin
 
 export const createSeal = createAsyncThunk('seal/create', async (draft: SealDraft, { dispatch }) => {
   const now = Date.now();
-  await db.seals.put({ ...draft, id: createId('seal'), createdAt: now, updatedAt: now });
+  await db.seals.put({ ...draft, id: createId('seal'), baseVersion: INITIAL_BASE_VERSION, createdAt: now, updatedAt: now });
   await dispatch(loadRubbings());
 });
 
 export const updateSeal = createAsyncThunk(
   'seal/update',
-  async (payload: { id: string; patch: Partial<Seal> }, { dispatch }) => {
-    await db.seals.update(payload.id, { ...payload.patch, updatedAt: Date.now() } as never);
+  async (payload: { id: string; patch: Partial<Seal> }, { dispatch, getState }) => {
+    const state = getState() as RootState;
+    const previous = state.rubbing.seals.find((item) => item.id === payload.id);
+    await db.seals.update(payload.id, {
+      ...payload.patch,
+      baseVersion: bumpBaseVersion(previous?.baseVersion),
+      updatedAt: Date.now(),
+    } as never);
     await dispatch(loadRubbings());
   },
 );
@@ -122,7 +134,7 @@ export const batchUpdateSeals = createAsyncThunk(
     const now = Date.now();
     const rows = state.rubbing.seals
       .filter((item) => payload.ids.includes(item.id))
-      .map((item) => ({ ...item, sealType: payload.sealType, updatedAt: now }));
+      .map((item) => ({ ...item, sealType: payload.sealType, baseVersion: bumpBaseVersion(item.baseVersion), updatedAt: now }));
     if (rows.length > 0) await db.seals.bulkPut(rows);
     await dispatch(loadRubbings());
   },

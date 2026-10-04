@@ -7,18 +7,20 @@ import { useDispatch, useSelector, type TypedUseSelectorHook } from 'react-redux
 import steleReducer, { loadSteles } from './steleSlice';
 import rubbingReducer, { loadRubbings } from './rubbingSlice';
 import lossReducer, { loadLosses } from './lossSlice';
+import syncReducer, { loadSyncState } from './syncSlice';
 
 export const store = configureStore({
   reducer: {
     stele: steleReducer,
     rubbing: rubbingReducer,
     loss: lossReducer,
+    sync: syncReducer,
   },
 });
 
-/** 首屏载入：一次性拉取三张表，保证页面打开即有数据 */
+/** 首屏载入：一次性拉取业务表与协作冲突区，保证页面打开即有数据 */
 export const loadAll = () => async (dispatch: AppDispatch): Promise<void> => {
-  await Promise.all([dispatch(loadSteles()), dispatch(loadRubbings()), dispatch(loadLosses())]);
+  await Promise.all([dispatch(loadSteles()), dispatch(loadRubbings()), dispatch(loadLosses()), dispatch(loadSyncState())]);
 };
 
 export type RootState = ReturnType<typeof store.getState>;

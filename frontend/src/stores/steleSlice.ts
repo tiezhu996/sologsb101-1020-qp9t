@@ -3,7 +3,7 @@
  * 维护碑刻列表、当前碑刻与筛选条件；跨页状态不留在组件内 useState。
  */
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit';
-import { createId, db, removeSteleCascade } from '@/utils/db';
+import { bumpBaseVersion, createId, db, INITIAL_BASE_VERSION, removeSteleCascade } from '@/utils/db';
 import type { Stele, SteleDraft, SteleForm } from '@/types/stele';
 import type { RootState } from './store';
 
@@ -38,7 +38,7 @@ export const loadSteles = createAsyncThunk('stele/load', async () => {
 
 export const createStele = createAsyncThunk('stele/create', async (draft: SteleDraft, { dispatch }) => {
   const now = Date.now();
-  const row: Stele = { ...draft, id: createId('stele'), createdAt: now, updatedAt: now };
+  const row: Stele = { ...draft, id: createId('stele'), baseVersion: INITIAL_BASE_VERSION, createdAt: now, updatedAt: now };
   await db.steles.put(row);
   await dispatch(loadSteles());
   return row;
@@ -46,8 +46,14 @@ export const createStele = createAsyncThunk('stele/create', async (draft: SteleD
 
 export const updateStele = createAsyncThunk(
   'stele/update',
-  async (payload: { id: string; patch: Partial<Stele> }, { dispatch }) => {
-    await db.steles.update(payload.id, { ...payload.patch, updatedAt: Date.now() } as never);
+  async (payload: { id: string; patch: Partial<Stele> }, { dispatch, getState }) => {
+    const state = getState() as RootState;
+    const previous = state.stele.items.find((item) => item.id === payload.id);
+    await db.steles.update(payload.id, {
+      ...payload.patch,
+      baseVersion: bumpBaseVersion(previous?.baseVersion),
+      updatedAt: Date.now(),
+    } as never);
     await dispatch(loadSteles());
   },
 );

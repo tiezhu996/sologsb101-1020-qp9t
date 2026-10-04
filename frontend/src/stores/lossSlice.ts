@@ -3,7 +3,7 @@
  * 维护字位损泐集合、比对记录与比对 A/B 选择及筛选条件。
  */
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit';
-import { createId, db } from '@/utils/db';
+import { bumpBaseVersion, createId, db, INITIAL_BASE_VERSION } from '@/utils/db';
 import type { Loss, LossDraft, LossSeverity, LossType } from '@/types/loss';
 import type { Compare, CompareDraft } from '@/types/compare';
 import { sortLosses } from '@/utils/collate';
@@ -46,7 +46,7 @@ export const loadLosses = createAsyncThunk('loss/load', async () => {
 
 export const createLoss = createAsyncThunk('loss/create', async (draft: LossDraft, { dispatch }) => {
   const now = Date.now();
-  const row: Loss = { ...draft, id: createId('loss'), createdAt: now, updatedAt: now };
+  const row: Loss = { ...draft, id: createId('loss'), baseVersion: INITIAL_BASE_VERSION, createdAt: now, updatedAt: now };
   await db.losses.put(row);
   await dispatch(loadLosses());
   return row;
@@ -54,8 +54,14 @@ export const createLoss = createAsyncThunk('loss/create', async (draft: LossDraf
 
 export const updateLoss = createAsyncThunk(
   'loss/update',
-  async (payload: { id: string; patch: Partial<Loss> }, { dispatch }) => {
-    await db.losses.update(payload.id, { ...payload.patch, updatedAt: Date.now() } as never);
+  async (payload: { id: string; patch: Partial<Loss> }, { dispatch, getState }) => {
+    const state = getState() as RootState;
+    const previous = state.loss.items.find((item) => item.id === payload.id);
+    await db.losses.update(payload.id, {
+      ...payload.patch,
+      baseVersion: bumpBaseVersion(previous?.baseVersion),
+      updatedAt: Date.now(),
+    } as never);
     await dispatch(loadLosses());
   },
 );
@@ -72,7 +78,7 @@ export const batchUpdateLosses = createAsyncThunk(
     const now = Date.now();
     const rows = state.loss.items
       .filter((item) => payload.ids.includes(item.id))
-      .map((item) => ({ ...item, ...payload.patch, updatedAt: now }));
+      .map((item) => ({ ...item, ...payload.patch, baseVersion: bumpBaseVersion(item.baseVersion), updatedAt: now }));
     if (rows.length > 0) await db.losses.bulkPut(rows);
     await dispatch(loadLosses());
   },
@@ -80,7 +86,7 @@ export const batchUpdateLosses = createAsyncThunk(
 
 export const saveCompare = createAsyncThunk('compare/save', async (draft: CompareDraft, { dispatch }) => {
   const now = Date.now();
-  const row: Compare = { ...draft, id: createId('cmp'), createdAt: now, updatedAt: now };
+  const row: Compare = { ...draft, id: createId('cmp'), baseVersion: INITIAL_BASE_VERSION, createdAt: now, updatedAt: now };
   await db.compares.put(row);
   await dispatch(loadLosses());
   return row;
@@ -88,8 +94,14 @@ export const saveCompare = createAsyncThunk('compare/save', async (draft: Compar
 
 export const updateCompare = createAsyncThunk(
   'compare/update',
-  async (payload: { id: string; patch: Partial<Compare> }, { dispatch }) => {
-    await db.compares.update(payload.id, { ...payload.patch, updatedAt: Date.now() } as never);
+  async (payload: { id: string; patch: Partial<Compare> }, { dispatch, getState }) => {
+    const state = getState() as RootState;
+    const previous = state.loss.compares.find((item) => item.id === payload.id);
+    await db.compares.update(payload.id, {
+      ...payload.patch,
+      baseVersion: bumpBaseVersion(previous?.baseVersion),
+      updatedAt: Date.now(),
+    } as never);
     await dispatch(loadLosses());
   },
 );
