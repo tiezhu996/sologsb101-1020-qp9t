@@ -28,6 +28,7 @@ import {
 import EmptyPanel from '@/components/common/EmptyPanel';
 import LossTag from '@/components/common/LossTag';
 import StatBadge from '@/components/common/StatBadge';
+import SyncPanel from '@/components/sync/SyncPanel';
 import { useIdbTable } from '@/hooks/useIdbTable';
 import { useAppDispatch, useAppSelector } from '@/stores/store';
 import { loadAll } from '@/stores/store';
@@ -242,6 +243,10 @@ export default function ExportView() {
         <StatBadge label="比对记录" value={stat.compares} suffix="条" tone="danger" />
         <StatBadge label="已定断代占比" value={`${stat.passPercent}%`} percent={stat.passPercent} tone="success" />
       </div>
+
+      <Card size="small" style={{ marginBottom: 16 }} styles={{ body: { padding: 16 } }}>
+        <SyncPanel />
+      </Card>
 
       <Row gutter={16}>
         <Col xs={24} xl={14}>

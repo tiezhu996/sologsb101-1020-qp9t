@@ -2,6 +2,7 @@
  * 损泐字位（Loss）数据模型
  * 按行号 + 字位坐标标注的损泐情况，是同碑多版本比对的比对单元。
  */
+import type { VersionedRecord } from './sync';
 
 /** 损泐类型：缺字 / 裂痕 / 漫漶 / 石花 */
 export type LossType = 'missing' | 'crack' | 'blur' | 'stoneFlower';
@@ -9,7 +10,7 @@ export type LossType = 'missing' | 'crack' | 'blur' | 'stoneFlower';
 /** 严重程度：轻 / 中 / 重 */
 export type LossSeverity = 'light' | 'medium' | 'heavy';
 
-export interface Loss {
+export interface Loss extends VersionedRecord {
   id: string;
   /** 所属拓本 id */
   rubbingId: string;
@@ -27,7 +28,7 @@ export interface Loss {
   updatedAt: number;
 }
 
-export type LossDraft = Omit<Loss, 'id' | 'createdAt' | 'updatedAt'>;
+export type LossDraft = Omit<Loss, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'baseVersion'>;
 
 export const LOSS_TYPE_LABEL: Record<LossType, string> = {
   missing: '缺字',

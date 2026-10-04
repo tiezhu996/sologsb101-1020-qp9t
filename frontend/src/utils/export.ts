@@ -44,6 +44,13 @@ function csvCell(value: string | number | null): string {
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
+/** 记录来源版本标注：当前版本 v{version}，共同基准 b{baseVersion}（两版相等表示已对齐） */
+export function versionStamp(row: { version?: number; baseVersion?: number }): string {
+  const version = typeof row.version === 'number' ? row.version : 1;
+  const base = typeof row.baseVersion === 'number' ? row.baseVersion : 1;
+  return `〔记录版本 v${version}·基准 v${base}〕`;
+}
+
 /** 编目卡：一块碑刻 + 其拓本 + 损泐 + 钤印 + 比对结论 */
 export function buildCatalogCard(
   stele: Stele,
@@ -53,7 +60,7 @@ export function buildCatalogCard(
   compares: Compare[],
 ): string {
   const lines: string[] = [];
-  lines.push(`【碑帖编目卡】${stele.title}`);
+  lines.push(`【碑帖编目卡】${stele.title}　${versionStamp(stele)}`);
   lines.push(`年代：${stele.era || '待考'}　形制：${STELE_FORM_LABEL[stele.form]}　尺寸：${stele.sizeCm || '未测'}`);
   lines.push(`所在地：${stele.location || '未记'}　书者：${stele.calligrapher || '佚名'}`);
   lines.push(`拓本数：${rubbings.length}　损泐字位：${losses.length} 条　钤印：${seals.length} 方`);
@@ -67,19 +74,19 @@ export function buildCatalogCard(
         .filter((seal) => seal.rubbingId === rubbing.id)
         .sort((a, b) => sealPositionWeight(a.position) - sealPositionWeight(b.position));
       lines.push(
-        `第 ${rubbing.versionNo} 版　${RUBBING_METHOD_LABEL[rubbing.method]}　${INK_TONE_LABEL[rubbing.inkTone]}　${rubbing.paperType}　${rubbing.sizeCm || '尺寸未记'}　收藏号 ${rubbing.collectionNo || '未编'}　${rubbing.dateGuess || '年代待考'}　${RUBBING_STATE_LABEL[rubbing.state]}`,
+        `第 ${rubbing.versionNo} 版　${RUBBING_METHOD_LABEL[rubbing.method]}　${INK_TONE_LABEL[rubbing.inkTone]}　${rubbing.paperType}　${rubbing.sizeCm || '尺寸未记'}　收藏号 ${rubbing.collectionNo || '未编'}　${rubbing.dateGuess || '年代待考'}　${RUBBING_STATE_LABEL[rubbing.state]}　${versionStamp(rubbing)}`,
       );
       lines.push(`　损泐字位（${rubbingLosses.length} 条）：`);
       if (rubbingLosses.length === 0) lines.push('　　无');
       rubbingLosses.forEach((loss) => {
         lines.push(
-          `　　${encodeCoord(loss.lineNo, loss.charNo)}　${LOSS_TYPE_LABEL[loss.type]}·${LOSS_SEVERITY_LABEL[loss.severity]}　${loss.note || ''}`,
+          `　　${encodeCoord(loss.lineNo, loss.charNo)}　${LOSS_TYPE_LABEL[loss.type]}·${LOSS_SEVERITY_LABEL[loss.severity]}　${loss.note || ''}　${versionStamp(loss)}`,
         );
       });
       lines.push(`　钤印（${rubbingSeals.length} 方）：`);
       if (rubbingSeals.length === 0) lines.push('　　无');
       rubbingSeals.forEach((seal) => {
-        lines.push(`　　${seal.position}　${seal.sealText}　${SEAL_TYPE_LABEL[seal.sealType]}　${seal.transcription || ''}`);
+        lines.push(`　　${seal.position}　${seal.sealText}　${SEAL_TYPE_LABEL[seal.sealType]}　${seal.transcription || ''}　${versionStamp(seal)}`);
       });
       lines.push('');
     });
@@ -93,9 +100,11 @@ export function buildCatalogCard(
     lines.push(
       `　${compare.date}　A：第 ${a?.versionNo ?? '?'} 版　B：第 ${b?.versionNo ?? '?'} 版　差异 ${compare.diffCount} 字　结论 ${
         COMPARE_CONCLUSION_LABEL[compare.conclusion]
-      }　操作人 ${compare.operator || '未填'}`,
+      }　操作人 ${compare.operator || '未填'}　${versionStamp(compare)}`,
     );
   });
+  lines.push('');
+  lines.push('来源版本说明：记录版本为该条业务记录的当前修订号，基准版本为最后一次协作对齐时的共同基准号；两号相同表示已与协作方对齐。');
   return lines.join('\n');
 }
 

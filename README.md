@@ -44,7 +44,7 @@ docker compose up -d --build      # 代码改动后重新构建
 | 构建工具 | Vite 5 | 开发服务器端口 22820 |
 | 状态管理 | Redux Toolkit 2 + React Redux 9 | `steleSlice` / `rubbingSlice` / `lossSlice` + `store.ts` 类型化 hooks |
 | 路由 | React Router 6（`createBrowserRouter`，history 模式） | nginx 侧配合 `try_files` 做 SPA fallback |
-| 本地存储 | Dexie 4（IndexedDB 封装）+ localStorage | 含数据结构版本号与 v1→v2 升级迁移 |
+| 本地存储 | Dexie 4（IndexedDB 封装）+ localStorage | 含数据结构版本号、v1→v2→v3 升级迁移、协作墓碑 / 冲突 / 已导入包登记 |
 | 容器化 | Docker 多阶段构建：`node:20-alpine` → `nginx:alpine` | 构建阶段类型检查 + 打包，运行阶段仅托管静态产物 |
 
 ---
@@ -71,7 +71,7 @@ npm run preview    # 本地预览构建产物（http://localhost:22820）
 | `/rubbings` | 拓本登记 | 录入拓法、纸墨、尺寸与收藏号；同碑自动生成版本序号，钤印增删改与批量调整印别，批量改状态 | Rubbing、Seal、Stele |
 | `/losses` | 损泐字位标注台 | 行号 × 字位网格逐格标注，批量改严重程度；选定基准拓本即时高亮差异字位 | Loss、Rubbing |
 | `/compare` | 同碑多版本比对与断代 | 选定 A/B 两拓本，按字位坐标比对损泐集合并排展示差异，推断早本 / 晚本 / 同版 / 待考并落库 | Compare、Loss、Rubbing |
-| `/export` | 编目卡生成与导出 | 按碑刻生成编目卡文本、合订导出、钤印明细、JSON 导入导出、损泐台账 CSV、清空重播种 | 全部模型 |
+| `/export` | 编目卡生成与导出 | 按碑刻生成编目卡文本、合订导出、钤印明细、**离线协作包导出 / 导入对账 / 冲突区决议**、JSON 导入导出、损泐台账 CSV、清空重播种 | 全部模型 |
 
 `/` 与未匹配路径重定向到 `/steles`。筛选条件写入 URL query（`?kw=&method=&state=` 等），可直接分享带条件的链接。
 
@@ -87,7 +87,26 @@ npm run preview    # 本地预览构建产物（http://localhost:22820）
 | Seal 钤印 | `src/types/seal.ts` | `id` `rubbingId` `sealText` `position` `transcription` `sealType`（收藏印/鉴赏印/作者印） | 按位置排序展示，支持批量改印别 |
 | Compare 版本比对 | `src/types/compare.ts` | `id` `steleId` `rubbingIdA` `rubbingIdB` `diffCount` `conclusion`（早本/晚本/同版/待考） `operator` `date` | 选定两拓本即生成差异清单并回写断代结论 |
 
-数据结构版本号 `DB_SCHEMA_VERSION` 定义在 `src/utils/db.ts`，当前为 `v2`：`losses` 表增加 `charNo` 与 `[rubbingId+lineNo+charNo]` 复合索引，并在 Dexie `.upgrade()` 中按行号顺序为历史字位记录重建 `charNo`。
+数据结构版本号 `DB_SCHEMA_VERSION` 定义在 `src/utils/db.ts`，当前为 `v3`：
+
+- `v1 → v2`：`losses` 表增加 `charNo` 与 `[rubbingId+lineNo+charNo]` 复合索引，并在 Dexie `.upgrade()` 中按行号顺序为历史字位记录重建 `charNo`（由 v1 直升 v3 时该迁移照常执行）。
+- `v2 → v3`：五张业务表的每条记录增加协作版本字段 `version`（当前修订号）与 `baseVersion`（最后一次协作对齐的共同基准号），历史记录与已有比对记录在升级时统一补初始基准 `v1`、内容原样保留；新增三张协作表：
+  - `tombstones` 删除墓碑：碑刻 / 拓本 / 叶子记录删除时沿业务关系落墓碑，随协作包传播删除事实；
+  - `conflicts` 未决冲突：同一记录两边都改过（含删改相抵）时存放本机值与协作包值，决议前一直保留；
+  - `packageLedger` 已导入协作包登记：按 `packageId` 幂等，重复导入同一包不重复新增。
+
+### 离线协作包（馆员离线补录对账）
+
+两台电脑各自离线补录同一碑的拓本、损泐、钤印、比对后，通过 `/export` 页的「协作包」对账，**不用整库备份互相覆盖**：
+
+1. **导出**：协作包含五张业务表的活记录（每条带 `version` / `baseVersion` 共同基准）与全部删除墓碑。
+2. **导入对账（三方合并）**：以共同基准对照两侧记录——
+   - 只有一边改过 / 新增 / 删除 → 自动应用单边变化；
+   - 同一条记录两边都改过（或一边删一边改）→ 不写入，进入**冲突区**，并排显示「本机工作库值 / 协作包值」；
+   - 远端删除碑刻 / 拓本时沿业务关系检查本机子树：子记录本机改过则整棵子树编为一个冲突组，整组选择「采用本机值（保留）」或「采用协作包值（删除）」，避免删了上级留下孤立记录。
+3. **决议后写入**：选定一侧写入并对齐版本基准；选择保留活记录会撤下对应删除墓碑，选择删除则补写墓碑继续传播。
+4. **安全保证**：引用不全（拓本缺碑刻、损泐 / 钤印缺拓本、比对缺碑刻或任一拓本）直接拒绝导入；对账结果在单个 Dexie 事务内落地，写入失败自动回滚到导入前状态；未决冲突持续保留，重复 `packageId` 的协作包直接跳过。
+5. **可追溯**：导出的编目卡在碑刻、拓本、损泐、钤印、比对每条记录后标注 `〔记录版本 vN·基准 vN〕`。
 
 ---
 
@@ -97,13 +116,14 @@ npm run preview    # 本地预览构建产物（http://localhost:22820）
 sologsb101-1020/
 ├── frontend/                     # 前端源码
 │   ├── src/
-│   │   ├── types/                # stele.ts rubbing.ts loss.ts seal.ts compare.ts
+│   │   ├── types/                # stele.ts rubbing.ts loss.ts seal.ts compare.ts sync.ts
 │   │   ├── stores/               # steleSlice.ts rubbingSlice.ts lossSlice.ts store.ts
 │   │   ├── components/common/    # LossTag.tsx FilterBar.tsx StatBadge.tsx EmptyPanel.tsx
+│   │   ├── components/sync/      # SyncPanel.tsx（协作包导出导入与冲突区）
 │   │   ├── hooks/                # useLossDiff.ts useIdbTable.ts
 │   │   ├── pages/                # SteleList.tsx RubbingList.tsx LossBoard.tsx CompareView.tsx ExportView.tsx
 │   │   ├── router/               # index.tsx
-│   │   ├── utils/                # collate.ts db.ts export.ts
+│   │   ├── utils/                # collate.ts db.ts export.ts sync.ts
 │   │   ├── styles/               # main.css
 │   │   ├── App.tsx main.tsx
 │   ├── public/favicon.svg
@@ -123,9 +143,9 @@ sologsb101-1020/
 
 ## 七、数据存储说明
 
-- **IndexedDB（Dexie，数据库名 `gbrubbing`）**：5 张业务表 `steles` / `rubbings` / `losses` / `seals` / `compares`，由 `src/utils/db.ts` 统一定义 schema、版本号与升级迁移；`initDatabase()` 首次打开时自动播种**三层互相引用**的演示数据（Stele → Rubbing → Loss / Seal，另有 Stele → Compare，固定 id 如 `stele_01`、`rub_0101`、`loss_010101`），播种幂等，保证字位网格与比对台打开即有内容。
-- **localStorage**：仅存元数据 —— `gbrubbing:db-version`（本地结构版本）、`gbrubbing:last-backup-at`（最近导出时间）、`gbrubbing:ui-prefs`（当前碑刻 / 拓本）。
-- **备份**：`/export` 页可导出 JSON（5 张表全量数据 + 结构版本号），导入时校验 `app` 字段与各集合数组完整性，覆盖导入前二次确认；另有编目卡 TXT 与损泐台账 CSV。
+- **IndexedDB（Dexie，数据库名 `gbrubbing`）**：5 张业务表 `steles` / `rubbings` / `losses` / `seals` / `compares`，加 3 张协作表 `tombstones` / `conflicts` / `packageLedger`，由 `src/utils/db.ts` 统一定义 schema、版本号与升级迁移；`initDatabase()` 首次打开时自动播种**三层互相引用**的演示数据（Stele → Rubbing → Loss / Seal，另有 Stele → Compare，固定 id 如 `stele_01`、`rub_0101`、`loss_010101`），播种幂等，保证字位网格与比对台打开即有内容。
+- **localStorage**：仅存元数据 —— `gbrubbing:db-version`（本地结构版本）、`gbrubbing:last-backup-at`（最近导出时间）、`gbrubbing:ui-prefs`（当前碑刻 / 拓本）、`gbrubbing:origin`（本机库标识，随协作包与墓碑标注来源）。
+- **备份**：`/export` 页可导出 JSON（5 张业务表 + 3 张协作表全量数据与结构版本号），导入时校验 `app` 字段与各集合数组完整性（旧版备份自动补初始基准），覆盖导入前二次确认；协作包（`kind: "collab"`）必须从「协作包合并」入口走对账，不能作整库覆盖；另有编目卡 TXT 与损泐台账 CSV。
 - **隐私与无状态**：数据不上传任何服务器，容器不挂载命名卷；清理浏览器站点数据或更换浏览器会丢失档案，请定期导出备份。
 
 ---

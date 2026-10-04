@@ -2,11 +2,12 @@
  * 钤印（Seal）数据模型
  * 拓本上的收藏印 / 鉴赏印 / 作者印，按位置排序展示，可批量调整印别。
  */
+import type { VersionedRecord } from './sync';
 
 /** 印别：收藏印 / 鉴赏印 / 作者印 */
 export type SealType = 'collection' | 'appraisal' | 'author';
 
-export interface Seal {
+export interface Seal extends VersionedRecord {
   id: string;
   /** 所属拓本 id */
   rubbingId: string;
@@ -22,7 +23,7 @@ export interface Seal {
   updatedAt: number;
 }
 
-export type SealDraft = Omit<Seal, 'id' | 'createdAt' | 'updatedAt'>;
+export type SealDraft = Omit<Seal, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'baseVersion'>;
 
 export const SEAL_TYPE_LABEL: Record<SealType, string> = {
   collection: '收藏印',

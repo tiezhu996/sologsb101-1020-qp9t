@@ -2,7 +2,7 @@
  * 应用外壳：左侧导航 + 顶部当前碑刻上下文 + 页脚数据说明
  * 首屏初始化 IndexedDB（首次自动播种）并 dispatch(loadAll()) 载入三张表。
  */
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { App as AntdApp, Badge, Button, Layout, Menu, Space, Tag, Typography } from 'antd';
 import {
@@ -13,12 +13,13 @@ import {
   FileSearchOutlined,
   PrinterOutlined,
 } from '@ant-design/icons';
+import { liveQuery } from 'dexie';
 import { ROUTES } from './router';
 import { loadAll, useAppDispatch, useAppSelector } from './stores/store';
 import { selectSteles } from './stores/steleSlice';
 import { selectRubbings } from './stores/rubbingSlice';
 import { selectLosses } from './stores/lossSlice';
-import { initDatabase } from './utils/db';
+import { db, initDatabase } from './utils/db';
 import { STELE_FORM_LABEL } from './types/stele';
 
 const { Header, Sider, Content, Footer } = Layout;
@@ -33,6 +34,15 @@ export default function App() {
   const rubbings = useAppSelector(selectRubbings);
   const losses = useAppSelector(selectLosses);
   const currentSteleId = useAppSelector((state) => state.stele.currentSteleId);
+  const [pendingConflicts, setPendingConflicts] = useState(0);
+
+  useEffect(() => {
+    const subscription = liveQuery(() => db.conflicts.count()).subscribe({
+      next: (count) => setPendingConflicts(count),
+      error: () => setPendingConflicts(0),
+    });
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,7 +94,7 @@ export default function App() {
             { key: ROUTES.rubbings, icon: <PrinterOutlined />, label: '拓本登记' },
             { key: ROUTES.losses, icon: <BookOutlined />, label: '损泐字位' },
             { key: ROUTES.compare, icon: <DiffOutlined />, label: '版本比对' },
-            { key: ROUTES.export, icon: <ExportOutlined />, label: '编目卡导出' },
+            { key: ROUTES.export, icon: <ExportOutlined />, label: pendingConflicts > 0 ? <Badge count={pendingConflicts} size="small" offset={[10, 0]}>编目卡导出</Badge> : '编目卡导出' },
           ]}
         />
         <div style={{ padding: '12px 16px', color: 'rgba(240,230,207,0.6)', fontSize: 12 }}>
@@ -94,6 +104,11 @@ export default function App() {
             </span>
             <span>拓本 {rubbings.length} 份</span>
             <span>损泐字位 {losses.length} 条</span>
+            {pendingConflicts > 0 ? (
+              <span style={{ color: '#e8b45a' }}>
+                <Badge count={pendingConflicts} size="small" color="#c9963c" /> 协作冲突待决议（编目卡导出页）
+              </span>
+            ) : null}
           </Space>
         </div>
       </Sider>

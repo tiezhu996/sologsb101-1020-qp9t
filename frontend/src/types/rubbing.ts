@@ -2,6 +2,7 @@
  * 拓本（Rubbing）数据模型
  * 同一碑刻下的不同拓本：拓法、纸墨、尺寸、收藏号与年代判断，自动生成版本序号。
  */
+import type { VersionedRecord } from './sync';
 
 /** 拓法：擦拓 / 扑拓 / 蝉翼拓 */
 export type RubbingMethod = 'rub' | 'pat' | 'cicada';
@@ -12,7 +13,7 @@ export type InkTone = 'thick' | 'light';
 /** 状态：待编目 / 已编目 / 待比对 */
 export type RubbingState = 'toCatalog' | 'cataloged' | 'toCompare';
 
-export interface Rubbing {
+export interface Rubbing extends VersionedRecord {
   id: string;
   /** 所属碑刻 id */
   steleId: string;
@@ -36,7 +37,7 @@ export interface Rubbing {
   updatedAt: number;
 }
 
-export type RubbingDraft = Omit<Rubbing, 'id' | 'createdAt' | 'updatedAt'>;
+export type RubbingDraft = Omit<Rubbing, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'baseVersion'>;
 
 export const RUBBING_METHOD_LABEL: Record<RubbingMethod, string> = {
   rub: '擦拓',

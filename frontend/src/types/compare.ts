@@ -2,11 +2,12 @@
  * 版本比对（Compare）数据模型
  * 同一碑刻下两份拓本的损泐差异清单与断代结论。
  */
+import type { VersionedRecord } from './sync';
 
 /** 断代结论：早本 / 晚本 / 同版 / 待考 */
 export type CompareConclusion = 'early' | 'late' | 'same' | 'pending';
 
-export interface Compare {
+export interface Compare extends VersionedRecord {
   id: string;
   /** 所属碑刻 id */
   steleId: string;
@@ -26,7 +27,7 @@ export interface Compare {
   updatedAt: number;
 }
 
-export type CompareDraft = Omit<Compare, 'id' | 'createdAt' | 'updatedAt'>;
+export type CompareDraft = Omit<Compare, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'baseVersion'>;
 
 export const COMPARE_CONCLUSION_LABEL: Record<CompareConclusion, string> = {
   early: '早本',

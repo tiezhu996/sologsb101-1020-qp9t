@@ -2,11 +2,12 @@
  * 碑刻（Stele）数据模型
  * 一处碑刻的基本档案：碑名、年代、所在地、形制、尺寸与书者。
  */
+import type { VersionedRecord } from './sync';
 
 /** 形制：碑 / 碣 / 摩崖 / 墓志 */
 export type SteleForm = 'stele' | 'boulder' | 'cliff' | 'epitaph';
 
-export interface Stele {
+export interface Stele extends VersionedRecord {
   /** 主键，播种数据使用固定字符串便于深链命中 */
   id: string;
   /** 碑名 */
@@ -25,7 +26,7 @@ export interface Stele {
   updatedAt: number;
 }
 
-export type SteleDraft = Omit<Stele, 'id' | 'createdAt' | 'updatedAt'>;
+export type SteleDraft = Omit<Stele, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'baseVersion'>;
 
 export const STELE_FORM_LABEL: Record<SteleForm, string> = {
   stele: '碑',

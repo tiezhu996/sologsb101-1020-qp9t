@@ -3,7 +3,15 @@
  * 维护拓本与钤印集合及筛选条件；同一碑刻下自动生成版本序号。
  */
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit';
-import { createId, db, removeRubbingCascade, renumberRubbings } from '@/utils/db';
+import {
+  bumpVersion,
+  createId,
+  db,
+  removeRecordWithTombstone,
+  removeRubbingCascade,
+  renumberRubbings,
+  withInitialVersion,
+} from '@/utils/db';
 import {
   nextRubbingState,
   type Rubbing,
@@ -50,7 +58,7 @@ export const loadRubbings = createAsyncThunk('rubbing/load', async () => {
 
 export const createRubbing = createAsyncThunk('rubbing/create', async (draft: RubbingDraft, { dispatch }) => {
   const now = Date.now();
-  const row: Rubbing = { ...draft, id: createId('rub'), createdAt: now, updatedAt: now };
+  const row: Rubbing = withInitialVersion({ ...draft, id: createId('rub'), createdAt: now, updatedAt: now });
   await db.rubbings.put(row);
   await renumberRubbings(row.steleId);
   await dispatch(loadRubbings());
@@ -60,7 +68,10 @@ export const createRubbing = createAsyncThunk('rubbing/create', async (draft: Ru
 export const updateRubbing = createAsyncThunk(
   'rubbing/update',
   async (payload: { id: string; patch: Partial<Rubbing> }, { dispatch }) => {
-    await db.rubbings.update(payload.id, { ...payload.patch, updatedAt: Date.now() } as never);
+    const current = await db.rubbings.get(payload.id);
+    if (current) {
+      await db.rubbings.put(bumpVersion({ ...current, ...payload.patch, updatedAt: Date.now() }));
+    }
     await dispatch(loadRubbings());
   },
 );
@@ -73,7 +84,7 @@ export const advanceRubbingState = createAsyncThunk(
     if (!row) return;
     const next = nextRubbingState(row.state);
     if (next === row.state) return;
-    await db.rubbings.update(id, { state: next, updatedAt: Date.now() } as never);
+    await db.rubbings.put(bumpVersion({ ...row, state: next, updatedAt: Date.now() }));
     await dispatch(loadRubbings());
   },
 );
@@ -85,7 +96,7 @@ export const batchUpdateRubbings = createAsyncThunk(
     const now = Date.now();
     const rows = state.rubbing.items
       .filter((item) => payload.ids.includes(item.id))
-      .map((item) => ({ ...item, ...payload.patch, updatedAt: now }));
+      .map((item) => bumpVersion({ ...item, ...payload.patch, updatedAt: now }));
     if (rows.length > 0) await db.rubbings.bulkPut(rows);
     await dispatch(loadRubbings());
   },
@@ -103,14 +114,17 @@ export const removeRubbing = createAsyncThunk('rubbing/remove', async (id: strin
 
 export const createSeal = createAsyncThunk('seal/create', async (draft: SealDraft, { dispatch }) => {
   const now = Date.now();
-  await db.seals.put({ ...draft, id: createId('seal'), createdAt: now, updatedAt: now });
+  await db.seals.put(withInitialVersion({ ...draft, id: createId('seal'), createdAt: now, updatedAt: now }));
   await dispatch(loadRubbings());
 });
 
 export const updateSeal = createAsyncThunk(
   'seal/update',
   async (payload: { id: string; patch: Partial<Seal> }, { dispatch }) => {
-    await db.seals.update(payload.id, { ...payload.patch, updatedAt: Date.now() } as never);
+    const current = await db.seals.get(payload.id);
+    if (current) {
+      await db.seals.put(bumpVersion({ ...current, ...payload.patch, updatedAt: Date.now() }));
+    }
     await dispatch(loadRubbings());
   },
 );
@@ -122,14 +136,14 @@ export const batchUpdateSeals = createAsyncThunk(
     const now = Date.now();
     const rows = state.rubbing.seals
       .filter((item) => payload.ids.includes(item.id))
-      .map((item) => ({ ...item, sealType: payload.sealType, updatedAt: now }));
+      .map((item) => bumpVersion({ ...item, sealType: payload.sealType, updatedAt: now }));
     if (rows.length > 0) await db.seals.bulkPut(rows);
     await dispatch(loadRubbings());
   },
 );
 
 export const removeSeal = createAsyncThunk('seal/remove', async (id: string, { dispatch }) => {
-  await db.seals.delete(id);
+  await removeRecordWithTombstone('seals', id);
   await dispatch(loadRubbings());
 });
 
